@@ -101,7 +101,7 @@ with st.sidebar:
 
     st.subheader("Rules")
     start_success = st.slider("Year-1 success target", 0.50, 0.99, 0.95, 0.01)
-    low_thr = st.slider("Low threshold (adjust up)", 0.50, 0.99, 0.75, 0.01)
+    low_thr = st.slider("Low threshold (adjust up)", 0.50, 0.99, 0.70, 0.01)
     high_thr = st.slider("High threshold (adjust down)", 0.50, 0.99, 0.90, 0.01)
     target_success = st.slider("Adjustment target success", 0.50, 0.99, 0.80, 0.01)
 
