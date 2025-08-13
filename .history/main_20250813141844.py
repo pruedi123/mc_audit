@@ -80,6 +80,7 @@ def compute_ratio_map(sim_factors: np.ndarray, years: int, start_success: float,
 
 # ---------- UI ----------
 st.set_page_config(page_title="All Begin Periods — Withdrawals Matrix", layout="wide")
+st.title("All Begin Periods — Withdrawals Matrix (Start 95%, Adjust to 80% if >90% or <75%)")
 
 with st.sidebar:
     st.header("Inputs")
@@ -104,14 +105,7 @@ with st.sidebar:
     high_thr = st.slider("High threshold (adjust down)", 0.50, 0.99, 0.90, 0.01)
     target_success = st.slider("Adjustment target success", 0.50, 0.99, 0.80, 0.01)
 
-# Dynamic title reflecting slider settings
-_title = (
-    f"All Begin Periods — Withdrawals Matrix (Start {int(round(start_success*100))}%, "
-    f"Adjust to {int(round(target_success*100))}% if >{int(round(high_thr*100))}% or <{int(round(low_thr*100))}%)"
-)
-st.title(_title)
-
-st.subheader("Historical Factors (Excel)")
+    st.subheader("Historical Factors (Excel)")
 
 # Directly load Excel from root directory
 file_path = "60%_mc.xlsx"
