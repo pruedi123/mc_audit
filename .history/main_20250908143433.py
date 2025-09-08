@@ -167,45 +167,72 @@ _title = (
 )
 st.title(_title)
 
-# Markdown expander – What this calculator shows & why it helps
-with st.expander("What this calculator shows & why it helps"):
-    st.markdown(
-        """
-### What this calculator is
-A history-driven *withdrawal planning lab*. It takes a chosen return series (Global LBM or S&P 500 SPX), a time horizon, and simple “guardrail-like” rules, then builds a **matrix**: every row is a different **historical start period**, every column is a **future year**, and each cell shows the **annual withdrawal** the rules would have produced.
+# Hover explainer – What this calculator shows & why it helps
+st.markdown(
+    """
+    <style>
+    .wmx-tip { position: relative; display: inline-block; cursor: help; color: #1D4ED8; margin-left: 6px; }
+    .wmx-tip .wmx-bubble {
+        visibility: hidden; opacity: 0; transition: opacity 0.15s ease-in-out;
+        position: absolute; z-index: 9999; top: 26px; left: 0;
+        width: min(720px, 92vw); padding: 12px 16px; line-height: 1.5;
+        background: #334155; color: #fff; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+        font-size: 0.92rem;
+    }
+    .wmx-tip:hover .wmx-bubble { visibility: visible; opacity: 1; }
+    .wmx-tip h4, .wmx-tip h5 { margin: 0.25rem 0 0.5rem 0; }
+    .wmx-tip ul { margin: 0.25rem 0 0.75rem 1.2rem; }
+    .wmx-tip li { margin: 0.15rem 0; }
+    .wmx-hr { border: none; border-top: 1px solid rgba(255,255,255,0.25); margin: 8px 0; }
+    </style>
 
-You can run it on **Global** and/or **S&P 500**, choose **equity allocations** from 100% Equity down to 100% Fixed, and see two kinds of summaries:
-- **Row‑Average Withdrawals — Percentiles (Combined):** how strong typical withdrawals were across all historical starts, side‑by‑side for Global and SP500.
-- **Years Below Year‑1 Withdrawal:** for each start period, how many years the plan’s withdrawal dipped below its initial level.
+    <div class="wmx-tip">
+      🛈 <strong>What this calculator shows & why it helps</strong>
+      <div class="wmx-bubble">
+        <h4>What this calculator is</h4>
+        <p>A history‑driven <em>withdrawal planning lab</em>. It takes a chosen return series (Global LBM or S&amp;P 500 SPX), a time horizon,
+        and simple “guardrail‑like” rules, then builds a <strong>matrix</strong>: every row is a different <strong>historical start period</strong>, every column is a <strong>future year</strong>,
+        and each cell shows the <strong>annual withdrawal</strong> the rules would have produced.</p>
+        <p>You can run it on <strong>Global</strong> and/or <strong>S&amp;P 500</strong>, choose <strong>equity allocations</strong> from 100% Equity down to 100% Fixed, and see two kinds of summaries:</p>
+        <ul>
+          <li><strong>Row‑Average Withdrawals — Percentiles (Combined):</strong> how strong typical withdrawals were across all historical starts, side‑by‑side for Global and SP500.</li>
+          <li><strong>Years Below Year‑1 Withdrawal:</strong> for each start period, how many years the plan’s withdrawal dipped below its initial level.</li>
+        </ul>
+        <p>Cells that fall <strong>below Year‑1</strong> in a given row are <strong>highlighted</strong>, so sequence‑of‑returns stress is immediately visible.</p>
 
-Cells that fall **below Year‑1** in a given row are **highlighted**, so sequence‑of‑returns stress is immediately visible.
+        <hr class="wmx-hr"/>
+        <div><strong>What it teaches (why it's educational)</strong></div>
+        <ul>
+          <li><strong>Sequence risk made visible:</strong> shows every historical path; you can see when and by how much withdrawals might ease depending on start date.</li>
+          <li><strong>Dollars instead of debates:</strong> converts rules and data into year‑by‑year spending paths and clear percentile context.</li>
+          <li><strong>Diversification you can feel:</strong> Global vs SP500 side‑by‑side reveals how concentration vs breadth affects sturdiness.</li>
+          <li><strong>Stocks vs fixed‑income clarity:</strong> allocations from 100% Equity to 100% Fixed change spending capacity in historical dollars.</li>
+          <li><strong>Calibration vs history:</strong> you set Year‑1 and adjustment ratios with sims; rules are then applied to actual history.</li>
+        </ul>
 
----
-### What it teaches (why it's educational)
-- **Sequence risk made visible:** shows every historical path; you can see when and by how much withdrawals might ease depending on start date.
-- **Dollars instead of debates:** converts rules and data into year‑by‑year spending paths and clear percentile context.
-- **Diversification you can feel:** Global vs SP500 side‑by‑side reveals how concentration vs breadth affects sturdiness.
-- **Stocks vs fixed‑income clarity:** allocations from 100% Equity to 100% Fixed change spending capacity in historical dollars.
-- **Calibration vs history:** you set Year‑1 and adjustment ratios with sims; rules are then applied to actual history.
+        <div><strong>Where it shines for investors</strong></div>
+        <ul>
+          <li><strong>Expectation‑setting:</strong> what a resilient, rules‑based plan looks like over 30 years.</li>
+          <li><strong>Timing luck context:</strong> two identical portfolios can feel different by start year — the matrix shows why.</li>
+          <li><strong>Diversification evidence:</strong> fewer red cells and stronger percentiles support broader exposure.</li>
+          <li><strong>Allocation conversations:</strong> turns safer‑vs‑growth preferences into their withdrawal impact.</li>
+        </ul>
 
----
-### Where it shines for investors
-- **Expectation‑setting:** what a resilient, rules‑based plan looks like over 30 years.
-- **Timing luck context:** two identical portfolios can feel different by start year — the matrix shows why.
-- **Diversification evidence:** fewer red cells and stronger percentiles support broader exposure.
-- **Allocation conversations:** turns safer‑vs‑growth preferences into their withdrawal impact.
+        <div><strong>A simple way to read it</strong></div>
+        <ol>
+          <li><strong>Pick</strong> dataset (Global / SP500 / Both), allocation, horizon, and rules.</li>
+          <li><strong>Scan the matrix:</strong> fewer red cells (below Year‑1) means smoother spending.</li>
+          <li><strong>Check percentiles:</strong> is the median row‑average withdrawal attractive? How do the tails look?</li>
+          <li><strong>Look at Years Below Year‑1:</strong> which start periods struggled, and by how much?</li>
+          <li><strong>Compare Global vs SP500:</strong> which produced sturdier withdrawals under the same rules?</li>
+        </ol>
 
----
-### A simple way to read it
-1. **Pick** dataset (Global / SP500 / Both), allocation, horizon, and rules.
-2. **Scan the matrix:** fewer red cells (below Year‑1) means smoother spending.
-3. **Check percentiles:** is the median row‑average withdrawal attractive? How do the tails look?
-4. **Look at Years Below Year‑1:** which start periods struggled, and by how much?
-5. **Compare Global vs SP500:** which produced sturdier withdrawals under the same rules?
-
-*Bottom line:* this helps investors **see** the interaction between markets, allocation, and withdrawal discipline — turning abstract risk and return into **concrete spending paths** they can understand, compare, and discuss.
-        """
-    )
+        <p><em>Bottom line:</em> this helps investors see the interaction between markets, allocation, and withdrawal discipline — turning abstract risk and return into <strong>concrete spending paths</strong> they can understand, compare, and discuss.</p>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Factors (CSV) — branch by data source
 if data_choice.startswith("Global"):

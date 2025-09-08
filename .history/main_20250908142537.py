@@ -167,46 +167,6 @@ _title = (
 )
 st.title(_title)
 
-# Markdown expander – What this calculator shows & why it helps
-with st.expander("What this calculator shows & why it helps"):
-    st.markdown(
-        """
-### What this calculator is
-A history-driven *withdrawal planning lab*. It takes a chosen return series (Global LBM or S&P 500 SPX), a time horizon, and simple “guardrail-like” rules, then builds a **matrix**: every row is a different **historical start period**, every column is a **future year**, and each cell shows the **annual withdrawal** the rules would have produced.
-
-You can run it on **Global** and/or **S&P 500**, choose **equity allocations** from 100% Equity down to 100% Fixed, and see two kinds of summaries:
-- **Row‑Average Withdrawals — Percentiles (Combined):** how strong typical withdrawals were across all historical starts, side‑by‑side for Global and SP500.
-- **Years Below Year‑1 Withdrawal:** for each start period, how many years the plan’s withdrawal dipped below its initial level.
-
-Cells that fall **below Year‑1** in a given row are **highlighted**, so sequence‑of‑returns stress is immediately visible.
-
----
-### What it teaches (why it's educational)
-- **Sequence risk made visible:** shows every historical path; you can see when and by how much withdrawals might ease depending on start date.
-- **Dollars instead of debates:** converts rules and data into year‑by‑year spending paths and clear percentile context.
-- **Diversification you can feel:** Global vs SP500 side‑by‑side reveals how concentration vs breadth affects sturdiness.
-- **Stocks vs fixed‑income clarity:** allocations from 100% Equity to 100% Fixed change spending capacity in historical dollars.
-- **Calibration vs history:** you set Year‑1 and adjustment ratios with sims; rules are then applied to actual history.
-
----
-### Where it shines for investors
-- **Expectation‑setting:** what a resilient, rules‑based plan looks like over 30 years.
-- **Timing luck context:** two identical portfolios can feel different by start year — the matrix shows why.
-- **Diversification evidence:** fewer red cells and stronger percentiles support broader exposure.
-- **Allocation conversations:** turns safer‑vs‑growth preferences into their withdrawal impact.
-
----
-### A simple way to read it
-1. **Pick** dataset (Global / SP500 / Both), allocation, horizon, and rules.
-2. **Scan the matrix:** fewer red cells (below Year‑1) means smoother spending.
-3. **Check percentiles:** is the median row‑average withdrawal attractive? How do the tails look?
-4. **Look at Years Below Year‑1:** which start periods struggled, and by how much?
-5. **Compare Global vs SP500:** which produced sturdier withdrawals under the same rules?
-
-*Bottom line:* this helps investors **see** the interaction between markets, allocation, and withdrawal discipline — turning abstract risk and return into **concrete spending paths** they can understand, compare, and discuss.
-        """
-    )
-
 # Factors (CSV) — branch by data source
 if data_choice.startswith("Global"):
     st.subheader("Factors (CSV): Global")
