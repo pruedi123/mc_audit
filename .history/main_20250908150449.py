@@ -109,7 +109,7 @@ with st.sidebar:
     st.subheader("Data Source")
     data_choice = st.selectbox(
         "Choose dataset",
-        ["Global Equity", "S&P 500", "Both (Global & SP500)"],
+        ["Global", "S&P 500", "Both (Global & SP500)"],
         index=0,
     )
 
