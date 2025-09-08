@@ -428,30 +428,5 @@ else:
         mime="text/csv",
     )
 
-
-# ------------------------------
-# Disclosures Download Section
-# ------------------------------
-st.divider()
-st.subheader("Disclosures")
-
-pdf_candidates = [
-    ("Global (LBM)", "DataSource LBM Portfolios.pdf"),
-    ("S&P 500 (SPX)", "DataSource SPX_e portfolios.pdf"),
-]
-
-for label, pdf_file in pdf_candidates:
-    try:
-        with open(pdf_file, "rb") as f:
-            pdf_bytes = f.read()
-        st.download_button(
-            f"Download {label} Disclosures (PDF)",
-            data=pdf_bytes,
-            file_name=pdf_file,
-            mime="application/pdf",
-        )
-    except FileNotFoundError:
-        st.info(f"Add `{pdf_file}` to the app folder to enable {label} disclosures.")
-
 # Tip: to reproduce a specific selection (e.g., StartRow_2..3 and Year_3..4), use iloc slicing:
 #   wd_df.iloc[2:4, 2:4]
