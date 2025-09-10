@@ -159,10 +159,6 @@ with st.sidebar:
     low_thr = st.slider("Low threshold (adjust up)", 0.50, 0.99, 0.70, 0.01)
     high_thr = st.slider("High threshold (adjust down)", 0.50, 0.99, 0.90, 0.01)
     target_success = st.slider("Adjustment target success", 0.50, 0.99, 0.80, 0.01)
-    exp_bps = st.slider("Annual Expense (basis points)", 0, 100, 0, 5)
-    exp_rate = float(exp_bps) / 10000.0
-    st.caption(f"Expense applied each step: {exp_bps} bps ({exp_rate:.2%}) per year")
-    fee_mult_per_step = (1.0 - exp_rate) ** (float(stride) / 12.0)
 
 # Dynamic title reflecting slider settings
 _title = (
@@ -264,7 +260,7 @@ ratio_start, ratio_low, ratio_high, ratio_target = compute_ratio_map(
 )
 
 # Helper to compute withdrawals matrix for a given historical series
-def compute_withdrawals_matrix(series_in: pd.Series, fee_mult_per_step: float) -> tuple[np.ndarray, pd.DataFrame]:
+def compute_withdrawals_matrix(series_in: pd.Series) -> tuple[np.ndarray, pd.DataFrame]:
     need_local = stride * (years - 1)
     n_valid_local = len(series_in) - need_local
     if n_valid_local <= 0:
@@ -284,7 +280,7 @@ def compute_withdrawals_matrix(series_in: pd.Series, fee_mult_per_step: float) -
                 if sr > high_thr or sr < low_thr:
                     withdraw = ratio_target[y - 1] * BOY
             withdraw_mat_local[r, y - 1] = withdraw
-            factor = hist_path[y - 1] * fee_mult_per_step
+            factor = hist_path[y - 1]
             BOY = (BOY - withdraw) * factor
         if (r + 1) % max(1, n_valid_local // 100) == 0:
             prog_local.progress((r + 1) / n_valid_local)
@@ -311,7 +307,7 @@ def style_key_percentiles(df_in: pd.DataFrame) -> pd.DataFrame:
     styles = pd.DataFrame('', index=df_in.index, columns=df_in.columns)
     if "Percentile" not in df_in.columns:
         return styles
-    mask = df_in["Percentile"].astype(str).isin(["0%", "50%"])
+    mask = df_in["Percentile"].astype(str).isin(["1%", "50%"])
     styles.loc[mask, :] = 'background-color: #fff3cd; font-weight: 600'
     return styles
 
@@ -319,10 +315,10 @@ if data_choice.startswith("Both"):
     # Compute for both, if available
     mats = []
     if 'series_global' in locals() and series_global is not None:
-        mat_g, df_g = compute_withdrawals_matrix(series_global, fee_mult_per_step)
+        mat_g, df_g = compute_withdrawals_matrix(series_global)
         mats.append(("Global", mat_g, df_g))
     if 'series_spx' in locals() and series_spx is not None:
-        mat_s, df_s = compute_withdrawals_matrix(series_spx, fee_mult_per_step)
+        mat_s, df_s = compute_withdrawals_matrix(series_spx)
         mats.append(("SP500", mat_s, df_s))
 
     for label, mat, df in mats:
@@ -390,7 +386,7 @@ else:
     if n_valid <= 0:
         st.error("Not enough factor rows for the chosen years/stride.")
         st.stop()
-    mat, df = compute_withdrawals_matrix(series, fee_mult_per_step)
+    mat, df = compute_withdrawals_matrix(series)
     styled = df.style.apply(style_below_year1, axis=None).format("${:,.0f}")
     st.subheader(
         f"Withdrawals Matrix (Years as Columns) — Start {int(round(start_success*100))}%, "

@@ -311,7 +311,7 @@ def style_key_percentiles(df_in: pd.DataFrame) -> pd.DataFrame:
     styles = pd.DataFrame('', index=df_in.index, columns=df_in.columns)
     if "Percentile" not in df_in.columns:
         return styles
-    mask = df_in["Percentile"].astype(str).isin(["0%", "50%"])
+    mask = df_in["Percentile"].astype(str).isin(["1%", "50%"])
     styles.loc[mask, :] = 'background-color: #fff3cd; font-weight: 600'
     return styles
 

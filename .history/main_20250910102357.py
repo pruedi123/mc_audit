@@ -159,10 +159,9 @@ with st.sidebar:
     low_thr = st.slider("Low threshold (adjust up)", 0.50, 0.99, 0.70, 0.01)
     high_thr = st.slider("High threshold (adjust down)", 0.50, 0.99, 0.90, 0.01)
     target_success = st.slider("Adjustment target success", 0.50, 0.99, 0.80, 0.01)
-    exp_bps = st.slider("Annual Expense (basis points)", 0, 100, 0, 5)
-    exp_rate = float(exp_bps) / 10000.0
-    st.caption(f"Expense applied each step: {exp_bps} bps ({exp_rate:.2%}) per year")
-    fee_mult_per_step = (1.0 - exp_rate) ** (float(stride) / 12.0)
+    exp_rate = st.slider("Annual Expense Ratio (0–1%)", 0.0, 0.01, 0.0, 0.005)
+    st.caption(f"Expense applied each step: {exp_rate:.2%} per year")
+    fee_mult_per_step = (1.0 - float(exp_rate)) ** (float(stride) / 12.0)
 
 # Dynamic title reflecting slider settings
 _title = (
