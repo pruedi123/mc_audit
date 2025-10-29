@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import numpy as np
 import pandas as pd
+import re
 import streamlit as st
 
 #
@@ -19,14 +20,13 @@ import streamlit as st
 # Robust column resolver: matches ignoring case, spaces, underscores, and tolerates common suffix variants like 'EQ'
 def _resolve_column(df: pd.DataFrame, desired_key: str) -> str | None:
     def _norm(s: str) -> str:
-        x = str(s).strip().lower()
-        # Remove ALL whitespace including regular spaces, tabs, and non‑breaking spaces
-        x = "".join(x.split())  # splits on any unicode whitespace, then rejoins
-        x = x.replace("_", "")
-        # normalize common variants
-        # e.g., "lbm100eq" -> "lbm100e"; "spx100eq" -> "spx100e"
+        x = str(s).lower()
+        # Remove UTF-8 BOM if present and any whitespace/underscores
+        x = x.replace("\ufeff", "")
+        x = re.sub(r"[\s_]+", "", x)
+        # normalize common variants like 'eq' -> 'e'
         if x.endswith("eq"):
-            x = x[:-1]  # drop the trailing 'q'
+            x = x[:-1]
         return x
     want = _norm(desired_key)
     for c in df.columns:
@@ -104,7 +104,7 @@ st.set_page_config(page_title="All Begin Periods — Withdrawals Matrix", layout
 # Load global factors CSV (auto-detect delimiter) and available LBM allocation columns
 try:
     df_global = pd.read_csv("global_factors.csv", sep=None, engine="python")
-    df_global.columns = [str(c).strip() for c in df_global.columns]
+    df_global.columns = [str(c).replace("\ufeff", "").strip() for c in df_global.columns]
     lbm_cols = [c for c in df_global.columns if str(c).upper().startswith("LBM ")]
 except Exception as e:
     df_global = None
@@ -161,15 +161,43 @@ with st.sidebar:
     # Build allocation options based on selected dataset (only show choices that exist in the CSVs)
     if data_choice.startswith("Global"):
         alloc_options = []
+        available_labels = set()
         if df_global is not None:
+            # Build from actual columns to avoid any mapping surprises
+            def _norm_local(s: str) -> str:
+                x = str(s).strip().lower()
+                x = "".join(x.split()).replace("_", "")
+                if x.endswith("eq"):
+                    x = x[:-1]
+                return x
+            # Map of normalized keys to pretty labels
+            lbm_norm_to_label = {
+                "lbm100e": "100% Equity",
+                "lbm90e":  "90% Equity",
+                "lbm80e":  "80% Equity",
+                "lbm70e":  "70% Equity",
+                "lbm60e":  "60% Equity",
+                "lbm50e":  "50% Equity",
+                "lbm40e":  "40% Equity",
+                "lbm30e":  "30% Equity",
+                "lbm20e":  "20% Equity",
+                "lbm10e":  "10% Equity",
+                "lbm100f": "100% Fixed",
+            }
+            for c in df_global.columns:
+                key = _norm_local(c)
+                if key in lbm_norm_to_label:
+                    available_labels.add(lbm_norm_to_label[key])
+        # Order the dropdown by our generic order, include only what exists
+        for label in generic_order:
+            if label in available_labels:
+                alloc_options.append(label)
+        # Fallback if detection yielded nothing (very unlikely)
+        if not alloc_options and df_global is not None:
+            # Try the original pretty map with resolver as a last resort
             for key, label in pretty_lbm.items():
                 if key in df_global.columns or _resolve_column(df_global, key) is not None:
                     alloc_options.append(label)
-        # Safety: if LBM 100E is present but label not added for any reason, force‑add it
-        if df_global is not None:
-            if ("LBM 100E" in df_global.columns or _resolve_column(df_global, "LBM 100E") is not None) \
-               and ("100% Equity" not in alloc_options):
-                alloc_options.insert(0, "100% Equity")
     elif data_choice.startswith("S&P"):
         alloc_options = []
         if df_spx is not None:
