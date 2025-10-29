@@ -150,13 +150,6 @@ with st.sidebar:
         "50% Equity","40% Equity","30% Equity","20% Equity","10% Equity","100% Fixed"
     ]
 
-    with st.expander("Debug: detected factor headers", expanded=False):
-        if df_global is not None:
-            st.caption("Global headers (first 20):")
-            st.code(", ".join(list(map(str, df_global.columns[:20]))), language="text")
-        if df_spx is not None:
-            st.caption("SPX headers (first 20):")
-            st.code(", ".join(list(map(str, df_spx.columns[:20]))), language="text")
 
     # Build allocation options based on selected dataset (only show choices that exist in the CSVs)
     if data_choice.startswith("Global"):
@@ -228,11 +221,6 @@ with st.sidebar:
             if "100% Equity" not in alloc_options:
                 alloc_options.insert(0, "100% Equity")
 
-    with st.expander("Debug: allocation options", expanded=False):
-        st.write({
-            "data_choice": data_choice,
-            "alloc_options": alloc_options,
-        })
 
     # Fallback if nothing matched
     if not alloc_options:
