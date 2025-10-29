@@ -163,6 +163,11 @@ with st.sidebar:
             for key, label in pretty_lbm.items():
                 if key in df_global.columns or _resolve_column(df_global, key) is not None:
                     alloc_options.append(label)
+        # Safety: if LBM 100E is present but label not added for any reason, force‑add it
+        if df_global is not None:
+            if ("LBM 100E" in df_global.columns or _resolve_column(df_global, "LBM 100E") is not None) \
+               and ("100% Equity" not in alloc_options):
+                alloc_options.insert(0, "100% Equity")
     elif data_choice.startswith("S&P"):
         alloc_options = []
         if df_spx is not None:
@@ -173,6 +178,10 @@ with st.sidebar:
                     desired = key
                 if key in df_spx.columns or _resolve_column(df_spx, desired) is not None:
                     alloc_options.append(label)
+        if df_spx is not None:
+            if ("spx100e" in map(str.lower, map(str, df_spx.columns)) or _resolve_column(df_spx, "spx100e") is not None) \
+               and ("100% Equity" not in alloc_options):
+                alloc_options.insert(0, "100% Equity")
     else:  # Both
         alloc_options = []
         # Add generic labels only if either dataset actually has a matching column
@@ -184,6 +193,16 @@ with st.sidebar:
             for key, label in pretty_spx.items():
                 if label not in alloc_options and (key in df_spx.columns or _resolve_column(df_spx, key) is not None):
                     alloc_options.append(label)
+        if (df_global is not None and ("LBM 100E" in df_global.columns or _resolve_column(df_global, "LBM 100E") is not None)) \
+           or (df_spx is not None and ("spx100e" in map(str.lower, map(str, df_spx.columns)) or _resolve_column(df_spx, "spx100e") is not None)):
+            if "100% Equity" not in alloc_options:
+                alloc_options.insert(0, "100% Equity")
+
+    with st.expander("Debug: allocation options", expanded=False):
+        st.write({
+            "data_choice": data_choice,
+            "alloc_options": alloc_options,
+        })
 
     # Fallback if nothing matched
     if not alloc_options:
