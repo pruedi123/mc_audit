@@ -16,10 +16,16 @@ import streamlit as st
 
 # ---------- Helpers ----------
 #
-# Robust column resolver: matches ignoring case, spaces, and underscores
+# Robust column resolver: matches ignoring case, spaces, underscores, and tolerates common suffix variants like 'EQ'
 def _resolve_column(df: pd.DataFrame, desired_key: str) -> str | None:
     def _norm(s: str) -> str:
-        return str(s).strip().lower().replace(" ", "").replace("_", "")
+        x = str(s).strip().lower()
+        x = x.replace(" ", "").replace("_", "")
+        # normalize common variants
+        # e.g., "lbm100eq" -> "lbm100e"; "spx100eq" -> "spx100e"
+        if x.endswith("eq"):
+            x = x[:-1]  # drop the trailing 'q'
+        return x
     want = _norm(desired_key)
     for c in df.columns:
         if _norm(str(c)) == want:
@@ -141,6 +147,14 @@ with st.sidebar:
         "100% Equity","90% Equity","80% Equity","70% Equity","60% Equity",
         "50% Equity","40% Equity","30% Equity","20% Equity","10% Equity","100% Fixed"
     ]
+
+    with st.expander("Debug: detected factor headers", expanded=False):
+        if df_global is not None:
+            st.caption("Global headers (first 20):")
+            st.code(", ".join(list(map(str, df_global.columns[:20]))), language="text")
+        if df_spx is not None:
+            st.caption("SPX headers (first 20):")
+            st.code(", ".join(list(map(str, df_spx.columns[:20]))), language="text")
 
     # Build allocation options based on selected dataset (only show choices that exist in the CSVs)
     if data_choice.startswith("Global"):
