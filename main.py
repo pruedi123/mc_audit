@@ -20,7 +20,9 @@ import streamlit as st
 def _resolve_column(df: pd.DataFrame, desired_key: str) -> str | None:
     def _norm(s: str) -> str:
         x = str(s).strip().lower()
-        x = x.replace(" ", "").replace("_", "")
+        # Remove ALL whitespace including regular spaces, tabs, and non‑breaking spaces
+        x = "".join(x.split())  # splits on any unicode whitespace, then rejoins
+        x = x.replace("_", "")
         # normalize common variants
         # e.g., "lbm100eq" -> "lbm100e"; "spx100eq" -> "spx100e"
         if x.endswith("eq"):
