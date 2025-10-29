@@ -15,6 +15,16 @@ import streamlit as st
 #
 
 # ---------- Helpers ----------
+#
+# Robust column resolver: matches ignoring case, spaces, and underscores
+def _resolve_column(df: pd.DataFrame, desired_key: str) -> str | None:
+    def _norm(s: str) -> str:
+        return str(s).strip().lower().replace(" ", "").replace("_", "")
+    want = _norm(desired_key)
+    for c in df.columns:
+        if _norm(str(c)) == want:
+            return c
+    return None
 def find_sheet_series(xls_bytes: bytes) -> pd.Series:
     """Locate a '12 Month Factor' column in any sheet; return numeric Series (dropna)."""
     xls = pd.ExcelFile(io.BytesIO(xls_bytes))
@@ -132,13 +142,38 @@ with st.sidebar:
         "50% Equity","40% Equity","30% Equity","20% Equity","10% Equity","100% Fixed"
     ]
 
-    # Build allocation options based on selected dataset
+    # Build allocation options based on selected dataset (only show choices that exist in the CSVs)
     if data_choice.startswith("Global"):
-        alloc_options = [pretty_lbm[c] for c in lbm_cols if c in pretty_lbm]
+        alloc_options = []
+        if df_global is not None:
+            for key, label in pretty_lbm.items():
+                if key in df_global.columns or _resolve_column(df_global, key) is not None:
+                    alloc_options.append(label)
     elif data_choice.startswith("S&P"):
-        alloc_options = [pretty_spx[c] for c in spx_cols if c in pretty_spx]
+        alloc_options = []
+        if df_spx is not None:
+            for key, label in pretty_spx.items():
+                if key == "spx0e":  # handled by pretty map as 100% Fixed
+                    desired = key
+                else:
+                    desired = key
+                if key in df_spx.columns or _resolve_column(df_spx, desired) is not None:
+                    alloc_options.append(label)
     else:  # Both
-        alloc_options = [g for g in generic_order if (g in inv_lbm or g in inv_spx)]
+        alloc_options = []
+        # Add generic labels only if either dataset actually has a matching column
+        if df_global is not None:
+            for key, label in pretty_lbm.items():
+                if label not in alloc_options and (key in df_global.columns or _resolve_column(df_global, key) is not None):
+                    alloc_options.append(label)
+        if df_spx is not None:
+            for key, label in pretty_spx.items():
+                if label not in alloc_options and (key in df_spx.columns or _resolve_column(df_spx, key) is not None):
+                    alloc_options.append(label)
+
+    # Fallback if nothing matched
+    if not alloc_options:
+        alloc_options = ["(No matching allocation columns found)"]
 
     st.subheader("Equity Allocation")
     alloc_choice = st.selectbox(
@@ -220,26 +255,48 @@ if data_choice.startswith("Global"):
         st.error("Could not load 'global_factors.csv' with LBM columns.")
         st.stop()
     raw = inv_lbm.get(alloc_choice)
-    if not raw or raw not in df_global.columns:
+    col = None
+    if raw:
+        if raw in df_global.columns:
+            col = raw
+        else:
+            col = _resolve_column(df_global, raw)
+    if not col:
         st.error("Selected Global allocation not available in global_factors.csv")
         st.stop()
-    series = pd.to_numeric(df_global[raw], errors='coerce').dropna().reset_index(drop=True)
+    series = pd.to_numeric(df_global[col], errors='coerce').dropna().reset_index(drop=True)
 elif data_choice.startswith("S&P"):
     st.subheader("Factors (CSV): S&P 500")
     if df_spx is None or not spx_cols:
         st.error("Could not load 'spx_factors.csv' with SPX columns.")
         st.stop()
     raw = inv_spx.get(alloc_choice)
-    if not raw or raw not in df_spx.columns:
+    col = None
+    if raw:
+        if raw in df_spx.columns:
+            col = raw
+        else:
+            col = _resolve_column(df_spx, raw)
+    if not col:
         st.error("Selected SPX allocation not available in spx_factors.csv")
         st.stop()
-    series = pd.to_numeric(df_spx[raw], errors='coerce').dropna().reset_index(drop=True)
+    series = pd.to_numeric(df_spx[col], errors='coerce').dropna().reset_index(drop=True)
 else:
     st.subheader("Factors (CSV): Both")
     raw_lbm = inv_lbm.get(alloc_choice)
     raw_spx = inv_spx.get(alloc_choice)
-    series_global = pd.to_numeric(df_global[raw_lbm], errors='coerce').dropna().reset_index(drop=True) if (df_global is not None and raw_lbm in (df_global.columns if df_global is not None else [])) else None
-    series_spx    = pd.to_numeric(df_spx[raw_spx], errors='coerce').dropna().reset_index(drop=True)    if (df_spx is not None and raw_spx in (df_spx.columns if df_spx is not None else [])) else None
+
+    col_g = None
+    if df_global is not None and raw_lbm:
+        col_g = raw_lbm if raw_lbm in df_global.columns else _resolve_column(df_global, raw_lbm)
+
+    col_s = None
+    if df_spx is not None and raw_spx:
+        col_s = raw_spx if raw_spx in df_spx.columns else _resolve_column(df_spx, raw_spx)
+
+    series_global = pd.to_numeric(df_global[col_g], errors='coerce').dropna().reset_index(drop=True) if (df_global is not None and col_g) else None
+    series_spx    = pd.to_numeric(df_spx[col_s], errors='coerce').dropna().reset_index(drop=True)    if (df_spx is not None and col_s) else None
+
     if series_global is None and series_spx is None:
         st.error("Selected allocation not available in either dataset.")
         st.stop()
