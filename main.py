@@ -1,13 +1,14 @@
 # main.py
-# Recreates the "all_rows_withdrawals_matrix_start95_rules_year1factor.csv" output
+# Recreates the "all_rows_withdrawals_matrix_start95_rules_year1factor.xlsx" output
 # Years as columns; each row = start row (begin period). Uses your prior rules:
 #   - Year 1 withdrawal = 95% success
 #   - For Y>=2, if success > 90% OR < 75% => switch to 80% success withdrawal
 #   - Year 1 uses the worksheet's 12-Month Factor (toggleable)
-# Success engine uses Normal(mean, std); you can also upload a CSV of factors.
+# Success engine uses Normal(mean, std); you can also upload an Excel file of factors.
 
 from __future__ import annotations
 import io
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import re
@@ -101,23 +102,52 @@ def compute_ratio_map(sim_factors: np.ndarray, years: int, start_success: float,
 # ---------- UI ----------
 st.set_page_config(page_title="All Begin Periods — Withdrawals Matrix", layout="wide")
 
-# Load global factors CSV (auto-detect delimiter) and available LBM allocation columns
-try:
-    df_global = pd.read_csv("global_factors.csv", sep=None, engine="python")
-    df_global.columns = [str(c).replace("\ufeff", "").strip() for c in df_global.columns]
-    lbm_cols = [c for c in df_global.columns if str(c).upper().startswith("LBM ")]
-except Exception as e:
-    df_global = None
-    lbm_cols = []
+def _load_allocation_workbook(path: str, match_fn) -> tuple[pd.DataFrame | None, list[str]]:
+    """Load an Excel workbook and return the first sheet containing desired allocation columns."""
+    path_obj = Path(path)
+    if not path_obj.exists():
+        st.error(f"Expected workbook '{path}' was not found in the app directory.")
+        return None, []
+    try:
+        xls = pd.ExcelFile(path_obj, engine="openpyxl")
+    except ImportError as exc:
+        st.error(
+            f"Reading '{path}' requires the 'openpyxl' package. "
+            f"Install it with `pip install openpyxl`. ({exc})"
+        )
+        return None, []
+    except Exception as exc:
+        st.error(f"Could not open '{path}': {exc}")
+        return None, []
 
-# Load spx factors CSV (auto-detect delimiter) and available SPX allocation columns
-try:
-    df_spx = pd.read_csv("spx_factors.csv", sep=None, engine="python")
-    df_spx.columns = [str(c).strip() for c in df_spx.columns]
-    spx_cols = [c for c in df_spx.columns if str(c).lower().startswith("spx")]
-except Exception:
-    df_spx = None
-    spx_cols = []
+    inspected = []
+    for sheet in xls.sheet_names:
+        try:
+            df_sheet = xls.parse(sheet_name=sheet)
+        except Exception as exc:
+            inspected.append(f"{sheet} (error: {exc})")
+            continue
+        df_sheet.columns = [str(c).replace("\ufeff", "").strip() for c in df_sheet.columns]
+        matched = [c for c in df_sheet.columns if match_fn(c)]
+        if matched:
+            return df_sheet, matched
+        inspected.append(sheet)
+
+    st.error(
+        f"No allocation columns were found in '{path}'. "
+        f"Sheets inspected: {', '.join(inspected) if inspected else '(none)'}."
+    )
+    return None, []
+
+# Load global and SPX workbooks
+df_global, lbm_cols = _load_allocation_workbook(
+    "global_factors.xlsx",
+    lambda c: str(c).upper().startswith("LBM "),
+)
+df_spx, spx_cols = _load_allocation_workbook(
+    "spx_factors.xlsx",
+    lambda c: str(c).lower().startswith("spx"),
+)
 
 with st.sidebar:
     st.header("Inputs")
@@ -151,7 +181,7 @@ with st.sidebar:
     ]
 
 
-    # Build allocation options based on selected dataset (only show choices that exist in the CSVs)
+    # Build allocation options based on selected dataset (only show choices that exist in the workbooks)
     if data_choice.startswith("Global"):
         alloc_options = []
         available_labels = set()
@@ -233,14 +263,14 @@ with st.sidebar:
     )
 
     st.subheader("Success Engine")
-    engine = st.radio("Source", ["Generate (Normal)", "Upload CSV (factors)"])
+    engine = st.radio("Source", ["Generate (Normal)", "Upload Excel (factors)"])
     n_runs = st.number_input("Sim paths", 100, 100000, 1000, 100)
     mean = st.number_input("Mean return (decimal)", value=0.073, step=0.001, format="%0.3f")
     std = st.number_input("Std dev (decimal)", value=0.1278, step=0.0001, format="%0.4f")
     seed = st.number_input("Seed", 0, 10**9, 42, 1)
     up_sim = None
-    if engine == "Upload CSV (factors)":
-        up_sim = st.file_uploader("Upload simulated factors CSV (n_runs x years, values are factors)", type=["csv"])
+    if engine == "Upload Excel (factors)":
+        up_sim = st.file_uploader("Upload simulated factors Excel file (n_runs x years, values are factors)", type=["xlsx"])
 
     st.subheader("Rules")
     start_success = st.slider("Year-1 success target", 0.50, 0.99, 0.95, 0.01)
@@ -299,11 +329,11 @@ Cells that fall **below Year‑1** in a given row are **highlighted**, so sequen
         """
     )
 
-# Factors (CSV) — branch by data source
+# Factors (Excel) — branch by data source
 if data_choice.startswith("Global"):
-    st.subheader("Factors (CSV): Global")
+    st.subheader("Factors (Excel): Global")
     if df_global is None or not lbm_cols:
-        st.error("Could not load 'global_factors.csv' with LBM columns.")
+        st.error("Could not load 'global_factors.xlsx' with LBM columns.")
         st.stop()
     raw = inv_lbm.get(alloc_choice)
     col = None
@@ -313,13 +343,13 @@ if data_choice.startswith("Global"):
         else:
             col = _resolve_column(df_global, raw)
     if not col:
-        st.error("Selected Global allocation not available in global_factors.csv")
+        st.error("Selected Global allocation not available in global_factors.xlsx")
         st.stop()
     series = pd.to_numeric(df_global[col], errors='coerce').dropna().reset_index(drop=True)
 elif data_choice.startswith("S&P"):
-    st.subheader("Factors (CSV): S&P 500")
+    st.subheader("Factors (Excel): S&P 500")
     if df_spx is None or not spx_cols:
-        st.error("Could not load 'spx_factors.csv' with SPX columns.")
+        st.error("Could not load 'spx_factors.xlsx' with SPX columns.")
         st.stop()
     raw = inv_spx.get(alloc_choice)
     col = None
@@ -329,11 +359,11 @@ elif data_choice.startswith("S&P"):
         else:
             col = _resolve_column(df_spx, raw)
     if not col:
-        st.error("Selected SPX allocation not available in spx_factors.csv")
+        st.error("Selected SPX allocation not available in spx_factors.xlsx")
         st.stop()
     series = pd.to_numeric(df_spx[col], errors='coerce').dropna().reset_index(drop=True)
 else:
-    st.subheader("Factors (CSV): Both")
+    st.subheader("Factors (Excel): Both")
     raw_lbm = inv_lbm.get(alloc_choice)
     raw_spx = inv_spx.get(alloc_choice)
 
@@ -359,12 +389,12 @@ if engine == "Generate (Normal)":
     sim_factors = build_sim_factors(int(n_runs), int(years), float(mean), float(std), int(seed))
 else:
     if up_sim is None:
-        st.info("Upload a simulated factors CSV to continue.")
+        st.info("Upload a simulated factors Excel file to continue.")
         st.stop()
-    df_sim = pd.read_csv(up_sim)
+    df_sim = pd.read_excel(up_sim)
     sim_factors = df_sim.values.astype(float)
     if sim_factors.shape[1] != years:
-        st.error(f"Uploaded CSV must have exactly {years} columns (one per year). Got {sim_factors.shape[1]}.")
+        st.error(f"Uploaded workbook must have exactly {years} columns (one per year). Got {sim_factors.shape[1]}.")
         st.stop()
 
 # Precompute success thresholds per horizon (ratios) — cached
@@ -425,6 +455,14 @@ def style_key_percentiles(df_in: pd.DataFrame) -> pd.DataFrame:
     styles.loc[mask, :] = 'background-color: #fff3cd; font-weight: 600'
     return styles
 
+def df_to_excel_bytes(df_in: pd.DataFrame, index: bool = True, sheet_name: str = "Sheet1") -> bytes:
+    """Render a DataFrame to Excel bytes for download buttons."""
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_in.to_excel(writer, index=index, sheet_name=sheet_name)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 if data_choice.startswith("Both"):
     # Compute for both, if available
     mats = []
@@ -442,12 +480,12 @@ if data_choice.startswith("Both"):
             f"Adjust to {int(round(target_success*100))}% if >{int(round(high_thr*100))}% or <{int(round(low_thr*100))}%"
         )
         st.dataframe(styled, use_container_width=True)
-        csv = df.to_csv(index=True).encode()
+        excel_bytes = df_to_excel_bytes(df, index=True, sheet_name=f"{label}_Withdrawals")
         st.download_button(
-            f"Download withdrawals_matrix_{label.lower()}.csv",
-            data=csv,
-            file_name=f"withdrawals_matrix_{label.lower()}.csv",
-            mime="text/csv",
+            f"Download withdrawals_matrix_{label.lower()}.xlsx",
+            data=excel_bytes,
+            file_name=f"withdrawals_matrix_{label.lower()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     # Combined Row‑Average Withdrawals — Percentiles for all sources
@@ -466,11 +504,12 @@ if data_choice.startswith("Both"):
 
     st.subheader("Row‑Average Withdrawals — Percentiles (Combined)")
     st.dataframe(combined_df_display.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+    combined_excel = df_to_excel_bytes(combined_df_numeric, index=False, sheet_name="Percentiles")
     st.download_button(
-        "Download row_avg_withdrawal_percentiles_combined.csv",
-        data=combined_df_numeric.to_csv(index=False).encode(),
-        file_name="row_avg_withdrawal_percentiles_combined.csv",
-        mime="text/csv",
+        "Download row_avg_withdrawal_percentiles_combined.xlsx",
+        data=combined_excel,
+        file_name="row_avg_withdrawal_percentiles_combined.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
     for label, mat, _ in mats:
@@ -486,11 +525,12 @@ if data_choice.startswith("Both"):
         below_df = below_df[below_df["Years < Year 1 Withdrawal"] > 0].reset_index(drop=True)
         st.subheader(f"Years Below Year‑1 Withdrawal — By Start Period ({label})")
         st.dataframe(below_df, use_container_width=True)
+        below_excel = df_to_excel_bytes(below_df, index=False, sheet_name="YearsBelow")
         st.download_button(
-            f"Download years_below_year1_withdrawal_{label.lower()}.csv",
-            data=below_df.to_csv(index=False).encode(),
-            file_name=f"years_below_year1_withdrawal_{label.lower()}.csv",
-            mime="text/csv",
+            f"Download years_below_year1_withdrawal_{label.lower()}.xlsx",
+            data=below_excel,
+            file_name=f"years_below_year1_withdrawal_{label.lower()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 else:
     # Single dataset path (Global or SPX)
@@ -507,12 +547,12 @@ else:
         f"Adjust to {int(round(target_success*100))}% if >{int(round(high_thr*100))}% or <{int(round(low_thr*100))}%"
     )
     st.dataframe(styled, use_container_width=True)
-    csv = df.to_csv(index=True).encode()
+    excel_bytes = df_to_excel_bytes(df, index=True, sheet_name="Withdrawals")
     st.download_button(
-        "Download all_rows_withdrawals_matrix_start95_rules_year1factor.csv",
-        data=csv,
-        file_name="all_rows_withdrawals_matrix_start95_rules_year1factor.csv",
-        mime="text/csv",
+        "Download all_rows_withdrawals_matrix_start95_rules_year1factor.xlsx",
+        data=excel_bytes,
+        file_name="all_rows_withdrawals_matrix_start95_rules_year1factor.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
     # Percentiles & below-Year1 for single dataset
@@ -526,11 +566,12 @@ else:
     })
     st.subheader("Row‑Average Withdrawals — Percentiles")
     st.dataframe(row_avg_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+    row_avg_excel = df_to_excel_bytes(row_avg_df, index=False, sheet_name="Percentiles")
     st.download_button(
-        "Download row_avg_withdrawal_percentiles.csv",
-        data=row_avg_df.to_csv(index=False).encode(),
-        file_name="row_avg_withdrawal_percentiles.csv",
-        mime="text/csv",
+        "Download row_avg_withdrawal_percentiles.xlsx",
+        data=row_avg_excel,
+        file_name="row_avg_withdrawal_percentiles.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
     counts = []
@@ -545,11 +586,12 @@ else:
     below_df = below_df[below_df["Years < Year 1 Withdrawal"] > 0].reset_index(drop=True)
     st.subheader("Years Below Year‑1 Withdrawal — By Start Period")
     st.dataframe(below_df, use_container_width=True)
+    below_excel = df_to_excel_bytes(below_df, index=False, sheet_name="YearsBelow")
     st.download_button(
-        "Download years_below_year1_withdrawal.csv",
-        data=below_df.to_csv(index=False).encode(),
-        file_name="years_below_year1_withdrawal.csv",
-        mime="text/csv",
+        "Download years_below_year1_withdrawal.xlsx",
+        data=below_excel,
+        file_name="years_below_year1_withdrawal.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
