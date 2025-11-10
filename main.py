@@ -531,7 +531,7 @@ if data_choice.startswith("Both"):
     combined_df_display = pd.DataFrame(combined_display)
     combined_df_numeric = pd.DataFrame(combined_numeric)
 
-    st.subheader("Row‑Average Withdrawals — Percentiles (Combined)")
+    st.subheader("Row‑Average Withdrawals in Today's Dollars— Percentiles (Combined)")
     st.dataframe(combined_df_display.style.apply(style_key_percentiles, axis=None), use_container_width=True)
     combined_excel = df_to_excel_bytes(combined_df_numeric, index=False, sheet_name="Percentiles")
     st.download_button(
@@ -569,7 +569,7 @@ if data_choice.startswith("Both"):
             "Ending Balance ($)": [f"${v:,.0f}" for v in ending_pcts],
             "% of Beginning Portfolio": [f"{(v / float(start_balance)):.1%}" for v in ending_pcts],
         })
-        st.subheader(f"Ending Balances — Percentiles ({label})")
+        st.subheader(f"Ending Balances in Today's Dollars — Percentiles ({label})")
         st.dataframe(ending_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
         ending_excel = df_to_excel_bytes(ending_df, index=False, sheet_name="EndingBalances_FinalYear")
         st.download_button(
@@ -604,7 +604,7 @@ if data_choice.startswith("Both"):
                 pcts = np.percentile(col, pct_list_resid)
                 display[label_year] = [f"${v:,.0f}" for v in pcts]
                 numeric[label_year] = list(pcts)
-            st.subheader(f"Residual Balances — Percentiles, Last {last_years} Years ({label})")
+            st.subheader(f"Residual Balances in Today's Dollars — Percentiles, Last {last_years} Years ({label})")
             display_df = pd.DataFrame(display)
             st.dataframe(display_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
             resid_pct_excel = df_to_excel_bytes(pd.DataFrame(numeric), index=False, sheet_name="ResidualPctLastYears")
