@@ -281,6 +281,14 @@ with st.sidebar:
     exp_rate = float(exp_bps) / 10000.0
     st.caption(f"Expense applied each step: {exp_bps} bps ({exp_rate:.2%}) per year")
     fee_mult_per_step = (1.0 - exp_rate) ** (float(stride) / 12.0)
+    spend_cap_pct = st.number_input(
+        "Spending cap above Year-1 (%)",
+        min_value=0.0,
+        max_value=500.0,
+        value=0.0,
+        step=1.0,
+        help="Withdrawals are limited to the Year-1 amount times (1 + cap%). Set to 0 to disable."
+    )
 
 # Dynamic title reflecting slider settings
 _title = (
@@ -403,36 +411,57 @@ ratio_start, ratio_low, ratio_high, ratio_target = compute_ratio_map(
     sim_factors, years, float(start_success), float(low_thr), float(high_thr), float(target_success)
 )
 
+spend_cap_pct = float(spend_cap_pct)
+if spend_cap_pct > 0:
+    year1_withdraw = ratio_start[0] * float(start_balance)
+    spend_cap_absolute = year1_withdraw * (1.0 + spend_cap_pct / 100.0)
+else:
+    spend_cap_absolute = None
+
 # Helper to compute withdrawals matrix for a given historical series
-def compute_withdrawals_matrix(series_in: pd.Series, fee_mult_per_step: float) -> tuple[np.ndarray, pd.DataFrame]:
+def compute_withdrawals_matrix(
+    series_in: pd.Series,
+    fee_mult_per_step: float,
+    spend_cap_max: float | None,
+) -> tuple[np.ndarray, pd.DataFrame, np.ndarray, np.ndarray]:
     need_local = stride * (years - 1)
     n_valid_local = len(series_in) - need_local
     if n_valid_local <= 0:
         st.error("Not enough factor rows for the chosen years/stride.")
         st.stop()
     withdraw_mat_local = np.zeros((n_valid_local, years), dtype=float)
+    ending_balances = np.zeros(n_valid_local, dtype=float)
+    residual_mat_local = np.zeros((n_valid_local, years), dtype=float)
     prog_local = st.progress(0, text="Running all start rows…")
+    cap_amt = spend_cap_max
     for r in range(n_valid_local):
         hist_path = np.array([float(series_in.iloc[r + stride * y]) for y in range(years)])
         if not use_year1_factor:
             hist_path[0] = 1.0
         BOY = float(start_balance)
         withdraw = ratio_start[0] * BOY
+        if cap_amt is not None:
+            withdraw = min(withdraw, cap_amt)
         for y in range(1, years + 1):
             if y > 1 and BOY > 0:
                 sr = success_rate_ratio((withdraw / BOY), sim_slices[y - 1])
                 if sr > high_thr or sr < low_thr:
                     withdraw = ratio_target[y - 1] * BOY
+            if cap_amt is not None:
+                withdraw = min(withdraw, cap_amt)
             withdraw_mat_local[r, y - 1] = withdraw
             factor = hist_path[y - 1] * fee_mult_per_step
             BOY = (BOY - withdraw) * factor
+            residual_mat_local[r, y - 1] = BOY
+        ending_balances[r] = BOY
         if (r + 1) % max(1, n_valid_local // 100) == 0:
             prog_local.progress((r + 1) / n_valid_local)
     prog_local.empty()
     cols_local = [f"Year_{i}" for i in range(1, years + 1)]
     idx_local  = [f"StartRow_{i}" for i in range(n_valid_local)]
     wd_df_local = pd.DataFrame(withdraw_mat_local, index=idx_local, columns=cols_local)
-    return withdraw_mat_local, wd_df_local
+    wd_df_local["Ending_Balance"] = ending_balances
+    return withdraw_mat_local, wd_df_local, ending_balances, residual_mat_local
 
 # Helper to style cells below Year 1 withdrawal for each row
 def style_below_year1(df_in: pd.DataFrame) -> pd.DataFrame:
@@ -441,7 +470,7 @@ def style_below_year1(df_in: pd.DataFrame) -> pd.DataFrame:
         return styles
     y1 = df_in['Year_1']
     for c in df_in.columns:
-        if c == 'Year_1':
+        if not c.startswith('Year_') or c == 'Year_1':
             continue
         styles[c] = np.where(df_in[c] < y1, 'background-color: #ffe6e6', '')
     return styles
@@ -467,13 +496,13 @@ if data_choice.startswith("Both"):
     # Compute for both, if available
     mats = []
     if 'series_global' in locals() and series_global is not None:
-        mat_g, df_g = compute_withdrawals_matrix(series_global, fee_mult_per_step)
-        mats.append(("Global", mat_g, df_g))
+        mat_g, df_g, ending_g, residual_g = compute_withdrawals_matrix(series_global, fee_mult_per_step, spend_cap_absolute)
+        mats.append(("Global", mat_g, df_g, ending_g, residual_g))
     if 'series_spx' in locals() and series_spx is not None:
-        mat_s, df_s = compute_withdrawals_matrix(series_spx, fee_mult_per_step)
-        mats.append(("SP500", mat_s, df_s))
+        mat_s, df_s, ending_s, residual_s = compute_withdrawals_matrix(series_spx, fee_mult_per_step, spend_cap_absolute)
+        mats.append(("SP500", mat_s, df_s, ending_s, residual_s))
 
-    for label, mat, df in mats:
+    for label, mat, df, _, _ in mats:
         styled = df.style.apply(style_below_year1, axis=None).format("${:,.0f}")
         st.subheader(
             f"Withdrawals Matrix — {label} — Start {int(round(start_success*100))}%, "
@@ -493,7 +522,7 @@ if data_choice.startswith("Both"):
     combined_display = {"Percentile": [f"{p}%" for p in pct_list]}
     combined_numeric = {"Percentile": [f"{p}%" for p in pct_list]}
     # Build columns for each label
-    for label, mat, _ in mats:
+    for label, mat, *_ in mats:
         row_avg = mat.mean(axis=1)
         row_avg_pcts = np.percentile(row_avg, pct_list)
         combined_display[label] = [f"${v:,.0f}" for v in row_avg_pcts]
@@ -512,7 +541,7 @@ if data_choice.startswith("Both"):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-    for label, mat, _ in mats:
+    for label, mat, _, ending_store, residual_store in mats:
         counts = []
         for r in range(mat.shape[0]):
             y1 = mat[r, 0]
@@ -532,6 +561,59 @@ if data_choice.startswith("Both"):
             file_name=f"years_below_year1_withdrawal_{label.lower()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+        ending_pct_list = [0, 1, 5, 10, 25, 50, 75, 90, 95, 99]
+        ending_pcts = np.percentile(ending_store, ending_pct_list)
+        ending_df = pd.DataFrame({
+            "Percentile": [f"{p}%" for p in ending_pct_list],
+            "Ending Balance ($)": [f"${v:,.0f}" for v in ending_pcts],
+            "% of Beginning Portfolio": [f"{(v / float(start_balance)):.1%}" for v in ending_pcts],
+        })
+        st.subheader(f"Ending Balances — Percentiles ({label})")
+        st.dataframe(ending_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+        ending_excel = df_to_excel_bytes(ending_df, index=False, sheet_name="EndingBalances_FinalYear")
+        st.download_button(
+            f"Download ending_balances_percentiles_{label.lower()}.xlsx",
+            data=ending_excel,
+            file_name=f"ending_balances_percentiles_{label.lower()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        # Residual balance matrix + percentiles for last five years
+        resid_cols = [f"EndYear_{i}" for i in range(1, years + 1)]
+        resid_idx = [f"StartRow_{i}" for i in range(residual_store.shape[0])]
+        resid_df = pd.DataFrame(residual_store, index=resid_idx, columns=resid_cols)
+        with st.expander(f"Residual Balances Matrix — End-of-Year ({label})", expanded=False):
+            st.dataframe(resid_df.style.format("${:,.0f}"), use_container_width=True)
+            resid_excel = df_to_excel_bytes(resid_df, index=True, sheet_name="ResidualBalances")
+            st.download_button(
+                f"Download residual_balances_matrix_{label.lower()}.xlsx",
+                data=resid_excel,
+                file_name=f"residual_balances_matrix_{label.lower()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        last_years = min(5, years)
+        if last_years > 0:
+            pct_list_resid = [0, 1, 5, 10, 25, 50, 75, 90, 95, 99]
+            display = {"Percentile": [f"{p}%" for p in pct_list_resid]}
+            numeric = {"Percentile": [f"{p}%" for p in pct_list_resid]}
+            for idx in range(years - last_years, years):
+                col = residual_store[:, idx]
+                label_year = f"End Year {idx + 1}"
+                pcts = np.percentile(col, pct_list_resid)
+                display[label_year] = [f"${v:,.0f}" for v in pcts]
+                numeric[label_year] = list(pcts)
+            st.subheader(f"Residual Balances — Percentiles, Last {last_years} Years ({label})")
+            display_df = pd.DataFrame(display)
+            st.dataframe(display_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+            resid_pct_excel = df_to_excel_bytes(pd.DataFrame(numeric), index=False, sheet_name="ResidualPctLastYears")
+            st.download_button(
+                f"Download residual_balances_percentiles_last{last_years}_{label.lower()}.xlsx",
+                data=resid_pct_excel,
+                file_name=f"residual_balances_percentiles_last{last_years}_{label.lower()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 else:
     # Single dataset path (Global or SPX)
     # Determine valid starts for this series
@@ -540,7 +622,7 @@ else:
     if n_valid <= 0:
         st.error("Not enough factor rows for the chosen years/stride.")
         st.stop()
-    mat, df = compute_withdrawals_matrix(series, fee_mult_per_step)
+    mat, df, ending_balances, residual_matrix = compute_withdrawals_matrix(series, fee_mult_per_step, spend_cap_absolute)
     styled = df.style.apply(style_below_year1, axis=None).format("${:,.0f}")
     st.subheader(
         f"Withdrawals Matrix (Years as Columns) — Start {int(round(start_success*100))}%, "
@@ -573,6 +655,58 @@ else:
         file_name="row_avg_withdrawal_percentiles.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+    ending_pct_list = [0, 1, 5, 10, 25, 50, 75, 90, 95, 99]
+    ending_pcts = np.percentile(ending_balances, ending_pct_list)
+    ending_df = pd.DataFrame({
+        "Percentile": [f"{p}%" for p in ending_pct_list],
+        "Ending Balance ($)": [f"${v:,.0f}" for v in ending_pcts],
+        "% of Beginning Portfolio": [f"{(v / float(start_balance)):.1%}" for v in ending_pcts],
+    })
+    st.subheader("Ending Balances — Percentiles")
+    st.dataframe(ending_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+    ending_excel = df_to_excel_bytes(ending_df, index=False, sheet_name="EndingBalances_FinalYear")
+    st.download_button(
+        "Download ending_balances_percentiles.xlsx",
+        data=ending_excel,
+        file_name="ending_balances_percentiles.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    resid_cols = [f"EndYear_{i}" for i in range(1, years + 1)]
+    resid_idx = [f"StartRow_{i}" for i in range(residual_matrix.shape[0])]
+    resid_df = pd.DataFrame(residual_matrix, index=resid_idx, columns=resid_cols)
+    with st.expander("Residual Balances Matrix — End-of-Year", expanded=False):
+        st.dataframe(resid_df.style.format("${:,.0f}"), use_container_width=True)
+        resid_excel = df_to_excel_bytes(resid_df, index=True, sheet_name="ResidualBalances")
+        st.download_button(
+            "Download residual_balances_matrix.xlsx",
+            data=resid_excel,
+            file_name="residual_balances_matrix.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    last_years = min(5, years)
+    if last_years > 0:
+        pct_list_resid = [0, 1, 5, 10, 25, 50, 75, 90, 95, 99]
+        display = {"Percentile": [f"{p}%" for p in pct_list_resid]}
+        numeric = {"Percentile": [f"{p}%" for p in pct_list_resid]}
+        for idx in range(years - last_years, years):
+            col = residual_matrix[:, idx]
+            label_year = f"End Year {idx + 1}"
+            pcts = np.percentile(col, pct_list_resid)
+            display[label_year] = [f"${v:,.0f}" for v in pcts]
+            numeric[label_year] = list(pcts)
+        st.subheader(f"Residual Balances — Percentiles, Last {last_years} Years")
+        display_df = pd.DataFrame(display)
+        st.dataframe(display_df.style.apply(style_key_percentiles, axis=None), use_container_width=True)
+        resid_pct_excel = df_to_excel_bytes(pd.DataFrame(numeric), index=False, sheet_name="ResidualPctLastYears")
+        st.download_button(
+            "Download residual_balances_percentiles_last_years.xlsx",
+            data=resid_pct_excel,
+            file_name=f"residual_balances_percentiles_last{last_years}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     counts = []
     for r in range(mat.shape[0]):
