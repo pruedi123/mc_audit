@@ -285,7 +285,7 @@ with st.sidebar:
         "Spending cap above Year-1 (%)",
         min_value=0.0,
         max_value=500.0,
-        value=0.0,
+        value=25.0,
         step=1.0,
         help="Withdrawals are limited to the Year-1 amount times (1 + cap%). Set to 0 to disable."
     )
