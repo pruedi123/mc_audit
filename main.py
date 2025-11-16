@@ -424,27 +424,43 @@ def compute_withdrawals_matrix(
     fee_mult_per_step: float,
     spend_cap_max: float | None,
 ) -> tuple[np.ndarray, pd.DataFrame, np.ndarray, np.ndarray]:
+    """Build withdrawal and residual matrices for every possible start period."""
     need_local = stride * (years - 1)
     n_valid_local = len(series_in) - need_local
     if n_valid_local <= 0:
         st.error("Not enough factor rows for the chosen years/stride.")
         st.stop()
+
+    # Pre-build a view of all historical paths so we don't slice inside the inner loop
+    series_arr = series_in.to_numpy(dtype=float)
+    hist_paths = np.empty((n_valid_local, years), dtype=float)
+    for y in range(years):
+        hist_paths[:, y] = series_arr[y * stride : y * stride + n_valid_local]
+    if not use_year1_factor:
+        hist_paths[:, 0] = 1.0
+
+    # Cache success-rate lookups keyed by (horizon, rounded spend ratio) to avoid recomputing
+    sr_cache: dict[tuple[int, float], float] = {}
+    def cached_success_rate(spend_ratio: float, horizon_idx: int) -> float:
+        key = (horizon_idx, round(float(spend_ratio), 6))
+        if key not in sr_cache:
+            sr_cache[key] = success_rate_ratio(spend_ratio, sim_slices[horizon_idx])
+        return sr_cache[key]
+
     withdraw_mat_local = np.zeros((n_valid_local, years), dtype=float)
     ending_balances = np.zeros(n_valid_local, dtype=float)
     residual_mat_local = np.zeros((n_valid_local, years), dtype=float)
     prog_local = st.progress(0, text="Running all start rows…")
     cap_amt = spend_cap_max
     for r in range(n_valid_local):
-        hist_path = np.array([float(series_in.iloc[r + stride * y]) for y in range(years)])
-        if not use_year1_factor:
-            hist_path[0] = 1.0
+        hist_path = hist_paths[r]
         BOY = float(start_balance)
         withdraw = ratio_start[0] * BOY
         if cap_amt is not None:
             withdraw = min(withdraw, cap_amt)
         for y in range(1, years + 1):
             if y > 1 and BOY > 0:
-                sr = success_rate_ratio((withdraw / BOY), sim_slices[y - 1])
+                sr = cached_success_rate((withdraw / BOY), y - 1)
                 if sr > high_thr or sr < low_thr:
                     withdraw = ratio_target[y - 1] * BOY
             if cap_amt is not None:
